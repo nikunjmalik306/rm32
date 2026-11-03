@@ -1,0 +1,5 @@
+AEAEAEAE  // @ 0x00000000 Useless data
+00000123  // @ 0x00000004 Useless data
+DEADBEEF  // @ 0x00000008 What we'll try to get in x18
+00000000
+00000000
