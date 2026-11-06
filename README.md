@@ -1,4 +1,4 @@
-# RM32 — Single-Cycle 32-bit RISC-V (RV32I) Processor Core
+# RM32 — Single-Cycle RISC-V (RV32I Subset) Processor Core
 
 [![Language](https://img.shields.io/badge/Language-SystemVerilog-blue.svg)](https://en.wikipedia.org/wiki/SystemVerilog)
 [![ISA](https://img.shields.io/badge/ISA-RISC--V%20RV32I%20(Subset)-orange.svg)](https://riscv.org/)
@@ -10,30 +10,24 @@
 
 ## 1. Project Overview
 
-**RM32** is a single-cycle 32-bit processor core implementing a foundational subset of the **RV32I** base integer instruction set of the open-standard [RISC-V ISA](https://riscv.org/). Written in modular **SystemVerilog**, the core executes an instruction every clock cycle using a combinational datapath orchestrated by a centralized control unit.
+**RM32** is a 32-bit single-cycle processor core in SystemVerilog implementing an **RV32I subset** of the open-standard [RISC-V ISA](https://riscv.org/). The core incorporates a program counter, 32×32 register file (`x0` hardwired to zero), ALU with zero flag, immediate sign-extender, opcode/funct-based controller, and separate instruction and data memories.
 
-The processor was developed through **first-principles incremental microarchitecture evolution**: establishing an operational baseline capable of memory operations—Load Word (`lw`) and Store Word (`sw`)—with self-checking behavioral simulation in AMD Xilinx Vivado XSim. The microarchitectural roadmap plans the subsequent datapath extensions, multiplexers, control signals, immediate decoders, arithmetic units, and branch structures required to support R-type arithmetic/logic (`add`, `sub`, `and`, `or`, `slt`) and conditional branches (`beq`).
+The processor implements the complete load/store path for Load Word (`lw`) and Store Word (`sw`): I- and S-type immediates, base+offset address generation, register writeback, and memory write-enable. The design is verified in AMD Xilinx Vivado XSim using a self-checking testbench (verifying PASS checks on register `x19` and data-memory writeback), alongside standalone ALU and data-memory simulations.
 
 > [!NOTE]
 > **Implementation Scope & Hardware Status**:
-> The RTL currently implements and verifies the core memory instructions (`lw`, `sw`). Verification was performed strictly through behavioral simulation in AMD Xilinx Vivado (XSim). The design was **not** implemented on physical FPGA hardware (no FPGA bitstream generation, board testing, or Integrated Logic Analyzer (ILA) validation).
+> The RTL implements the core memory instructions (`lw`, `sw`). Verification was performed through behavioral simulation in AMD Xilinx Vivado (XSim). The design was **not** implemented on physical FPGA hardware (no FPGA bitstream generation, board testing, or Integrated Logic Analyzer (ILA) validation).
 
 ---
 
 ## 2. Implementation & Verification Status
 
-The table below summarizes the exact implementation and verification state of each instruction across the RTL and testbench:
+The table below summarizes the exact implementation and verification state across the RTL and testbench:
 
 | Instruction | Format | Description | Implemented in RTL | Verified by Testbench | Status / Notes |
 |:---|:---:|:---|:---:|:---:|:---|
 | **`lw`** | I-Type | Load Word (`lw rd, offset(rs1)`) | **Yes** | **Yes** (XSim PASS) | Base + offset address calculation, loads word from Data Memory to Register File |
 | **`sw`** | S-Type | Store Word (`sw rs2, offset(rs1)`) | **Yes** | **Yes** (XSim PASS) | Base + offset address calculation, stores word from Register File to Data Memory |
-| **`add`** | R-Type | Add (`add rd, rs1, rs2`) | *Planned* | *No* | Requires ResultSrc mux (ALU vs DMem), ALUSrc mux, and full ALUOp decode |
-| **`sub`** | R-Type | Subtract (`sub rd, rs1, rs2`) | *Planned* | *No* | Requires ALU subtractor logic and ALUOp decode |
-| **`and`** | R-Type | Bitwise AND (`and rd, rs1, rs2`) | *Planned* | *No* | Requires bitwise AND in ALU and ALUOp decode |
-| **`or`** | R-Type | Bitwise OR (`or rd, rs1, rs2`) | *Planned* | *No* | Requires bitwise OR in ALU and ALUOp decode |
-| **`slt`** | R-Type | Set Less Than (`slt rd, rs1, rs2`) | *Planned* | *No* | Requires signed comparison in ALU and ALUOp decode |
-| **`beq`** | B-Type | Branch if Equal (`beq rs1, rs2, offset`) | *Planned* | *No* | Requires branch target adder, PCSrc mux, and zero flag branch gating |
 
 ---
 
@@ -41,13 +35,13 @@ The table below summarizes the exact implementation and verification state of ea
 
 | Parameter | Specification | Details |
 |:---|:---|:---|
-| **Architecture** | RISC-V RV32I (Subset) | 32-bit unprivileged base integer instruction set (`lw`, `sw` implemented; R-type and branch planned) |
+| **Architecture** | RISC-V RV32I (Subset) | 32-bit unprivileged base integer instruction set (`lw`, `sw` implemented) |
 | **Microarchitecture** | Single-Cycle | 1 CPI (Cycles Per Instruction) for all supported operations |
 | **Datapath Width** | 32 bits | 32-bit internal data buses and ALU operands |
 | **Address Space** | 32 bits | Word-aligned memory addressing (`address[31:2]`) |
 | **Register File** | 32 × 32-bit | Dual asynchronous read ports, single synchronous write port, hardwired zero register (`x0 = 0`) |
 | **Memory Model** | Harvard (Split I/D) | Dedicated Instruction Memory and Data Memory with `$readmemh` initialization |
-| **Control Unit** | Combinational Decoder | Opcode-driven decoder asserting `reg_write`, `mem_write`, `imm_src`, and `alu_ctrl` for memory operations |
+| **Control Unit** | Combinational Decoder | Opcode/funct-based controller asserting `reg_write`, `mem_write`, `imm_src`, and `alu_ctrl` for memory operations |
 | **ALU Operations** | 32-bit Addition & Zero Flag | 32-bit addition (effective address calculation `base + imm`) and zero flag detection |
 | **Verification Scope** | Behavioral Simulation Only | Simulated in AMD Xilinx Vivado (XSim); no physical FPGA hardware deployment or ILA testing |
 
@@ -55,7 +49,7 @@ The table below summarizes the exact implementation and verification state of ea
 
 ## 4. Microarchitectural Evolution (Design Progression)
 
-The processor was developed systematically by analyzing the datapath requirements one instruction family at a time:
+The processor datapath was developed systematically by establishing the core memory access flow:
 
 ```
                     ┌────────────────────────────────────────────────────────┐
@@ -66,27 +60,19 @@ The processor was developed systematically by analyzing the datapath requirement
                  ▼                                                             ▼
        [Stage 1: Base Datapath]                                      [Stage 2: Store Word]
            Load Word (`lw`)                                              Store Word (`sw`)
-        • PC + 4 incrementer                                          • Connect RegFile RD2
-        • 12-bit I-type Sign Extension                                • ALUSrc selects Imm for memory offset
+        • PC + 4 incrementer                                          • Connect RegFile data2 to write_data
+        • 12-bit I-type Sign Extension                                • Compute Imm for memory offset
         • ALU addition (Base + Offset)                                • Add S-type Immediate extraction
-        • Data Memory read -> RegFile WD3                             • MemWrite signal for synchronous store
+        • Data Memory read -> RegFile load_data                       • mem_write signal for synchronous store
                  │                                                             │
-                 │                     [IMPLEMENTED IN RTL]                    │
                  └──────────────────────────────┬──────────────────────────────┘
                                                 │
-                 ┌──────────────────────────────┴──────────────────────────────┐
-                 ▼                                                             ▼
-     [Stage 3: Planned R-Type]                                     [Stage 4: Planned Branch]
- `add`, `sub`, `and`, `or`, `slt`                                              `beq`
-        • Add ResultSrc Mux (ALU vs DMem)                             • Add Branch Target Adder (PC + Imm)
-        • ALU direct feed to Register File                            • ALU Subtraction with Zero Flag
-        • 3-bit ALUControl decoding                                   • PCSrc Logic: Branch & Zero
-        • Multi-op ALU Arithmetic/Logic core                          • Add Next-PC Selection Mux
+                                      [IMPLEMENTED IN RTL]
 ```
 
 ---
 
-### Stage 1: Base Datapath — Load Word (`lw`) [Implemented]
+### Stage 1: Base Datapath — Load Word (`lw`)
 
 The foundation of RM32 begins with the **Load Word** instruction (`lw rd, offset(rs1)`), an I-type instruction.
 
@@ -101,37 +87,37 @@ Instruction Format (I-Type):
 ```
 
 #### Datapath Flow for `lw`:
-1. **Instruction Fetch:** The Program Counter (`PC`) outputs the current instruction address to the Instruction Memory. In parallel, an adder computes `PC + 4` for sequential execution.
-2. **Register Read:** Bits `instruction[19:15]` (`rs1`) address read port `A1` of the Register File, yielding base register data `RD1`.
-3. **Immediate Sign-Extension:** Bits `instruction[31:20]` (`imm[11:0]`) represent a 12-bit signed immediate. The Sign Extension unit sign-extends this value to a full 32-bit word to match the ALU operand width.
+1. **Instruction Fetch:** The Program Counter (`pc`) outputs the current instruction address to the Instruction Memory. In parallel, an adder computes `pc_next = pc + 4` for sequential execution.
+2. **Register Read:** Bits `instruction[19:15]` (`source1`) address read port `address1` of the Register File, yielding base register data `data1`.
+3. **Immediate Sign-Extension:** Bits `instruction[31:20]` represent a 12-bit signed immediate (`instr[24:13]` from `instruction[31:7]`). The Sign Extension unit sign-extends this value to a full 32-bit word (`immediate`) matching the ALU operand width.
 4. **Address Computation:** The ALU computes the effective memory address:
-   $$\text{Address} = \text{RD1} + \text{SignExt}(\text{imm})$$
-5. **Memory Access & Writeback:** The computed address indexes the Data Memory (`dmem`). The read data (`dmem_data`) is driven into register write port `WD3`, addressed by `instruction[11:7]` (`rd`), where it is latched on the rising clock edge when `RegWrite = 1`.
+   $$\text{addr} = \text{data1} + \text{immediate}$$
+5. **Memory Access & Writeback:** The computed address indexes the Data Memory (`data_memory`). The read data (`dmem_data`) drives `load_data` into register write port `write_data` addressed by `instruction[11:7]` (`load_address`), latched on the rising clock edge when `reg_write = 1`.
 
 ```mermaid
 flowchart LR
-    PC["PC (Program Counter)"] -->|"PC"| IMEM["Instruction Memory"]
-    IMEM -->|"instr[19:15] (rs1)"| RF_A1["RegFile (A1)"]
-    IMEM -->|"instr[31:20] (imm)"| SEXT["Sign Extender (12->32)"]
-    IMEM -->|"instr[11:7] (rd)"| RF_A3["RegFile (A3)"]
+    PC["PC (Program Counter)"] -->|"pc"| IMEM["Instruction Memory"]
+    IMEM -->|"instr[19:15] (source1)"| RF_A1["RegFile (address1)"]
+    IMEM -->|"instr[31:7]"| SEXT["Sign Extender (imm_src=00)"]
+    IMEM -->|"instr[11:7] (load_address)"| RF_A3["RegFile (address3)"]
     
-    RF_A1 -->|"RD1"| ALU_A["ALU Input A"]
-    SEXT -->|"ExtImm"| ALU_B["ALU Input B"]
+    RF_A1 -->|"data1"| ALU_A["ALU Input a"]
+    SEXT -->|"immediate"| ALU_B["ALU Input b"]
     
     ALU_A & ALU_B --> ALU["ALU (+)"]
-    ALU -->|"Address"| DMEM["Data Memory"]
-    DMEM -->|"Read Data"| RF_WD3["RegFile (WD3)"]
+    ALU -->|"addr"| DMEM["Data Memory"]
+    DMEM -->|"dmem_data"| RF_WD["RegFile (load_data)"]
     
-    PC -->|"PC"| PC_ADD["Adder (+4)"]
-    PC_ADD -->|"PC + 4"| PC_NEXT["Next PC"]
+    PC -->|"pc"| PC_ADD["Adder (+4)"]
+    PC_ADD -->|"pc + 4"| PC_NEXT["pc_next"]
     PC_NEXT --> PC
 ```
 
 ---
 
-### Stage 2: Adding Store Word (`sw`) [Implemented]
+### Stage 2: Adding Store Word (`sw`)
 
-To store data back into memory, the core adds the **Store Word** instruction (`sw rs2, offset(rs1)`), an S-type instruction.
+To store data into memory, the core implements the **Store Word** instruction (`sw rs2, offset(rs1)`), an S-type instruction.
 
 ```
 Instruction Format (S-Type):
@@ -139,163 +125,101 @@ Instruction Format (S-Type):
 ┌─────────────────────┬─────────────┬─────────────┬────────┬────────────┬──────────────┐
 │      imm[11:5]      │     rs2     │     rs1     │ funct3 │  imm[4:0]  │    opcode    │
 │       0000000       │    00110    │    01001    │  010   │   01000    │   0100011    │
-└─────────────────────┬─────────────┬─────────────┬────────┬────────────┴──────────────┘
+└─────────────────────┴─────────────┴─────────────┴────────┴────────────┴──────────────┘
 ```
 
 #### Datapath Flow for `sw`:
-- **Second Register Read Port (`RD2`):** Bits `instruction[24:20]` (`rs2`) route to Register File port `A2` to read the data to be written (`RD2`). This signal directly connects to `write_data` of Data Memory.
-- **Immediate Generation (`ImmSrc`):** S-type instructions split the 12-bit immediate across `instruction[31:25]` and `instruction[11:7]`. The Sign Extension unit supports `ImmSrc[1:0]`:
-  - `ImmSrc = 2'b00` (I-type): Imm = `{{20{instr[31]}}, instr[31:20]}`
-  - `ImmSrc = 2'b01` (S-type): Imm = `{{20{instr[31]}}, instr[31:25], instr[11:7]}`
-- **Memory Write Enable (`MemWrite`):** Asserted high exclusively for store instructions (`opcode = 7'b0100011`) to latch `RD2` into Data Memory at the target address on the rising clock edge.
+- **Second Register Read Port:** Bits `instruction[24:20]` (`source2`) route to Register File port `address2` to read the data to be written (`data2`). This connects directly to `write_data` of Data Memory.
+- **Immediate Generation (`imm_src`):** S-type instructions split the 12-bit immediate across `instruction[31:25]` and `instruction[11:7]`. The Sign Extension unit supports `imm_src[1:0]`:
+  - `imm_src = 2'b00` (I-type): `immediate = {{20{gathered_imm[11]}}, instr[24:13]}`
+  - `imm_src = 2'b01` (S-type): `immediate = {{20{gathered_imm[11]}}, instr[24:18], instr[4:0]}`
+- **Memory Write Enable (`mem_write`):** Asserted high for store instructions (`op_code = 7'b0100011`) to latch `write_data` (`data2`) into Data Memory at `addr` on the rising clock edge.
 
 ---
 
-### Stage 3: Extending to R-Type Operations [Planned Architecture]
+## 5. Processor Datapath Architecture
 
-R-type instructions operate strictly between registers without memory access.
-
-```
-Instruction Format (R-Type):
- 31                 25 24         20 19         15 14    12 11        7 6            0
-┌─────────────────────┬─────────────┬─────────────┬────────┬───────────┬──────────────┐
-│       funct7        │     rs2     │     rs1     │ funct3 │    rd     │    opcode    │
-│      0000000        │    00110    │    00101    │  110   │   00100   │   0110011    │
-└─────────────────────┴─────────────┴─────────────┴────────┴───────────┴──────────────┘
- Example: or x4, x5, x6
-```
-
-#### Required Datapath Additions for R-Type:
-- **`ResultSrc` Multiplexer:** A multiplexer at the writeback stage allowing the register file write data port (`WD3`) to select between:
-  - `ResultSrc = 0`: `ALUResult` (for R-type instructions)
-  - `ResultSrc = 1`: `ReadData` from Data Memory (for `lw`)
-- **`ALUSrc` Multiplexer:** Selects between `RD2` (for R-type) and `SignExt(Imm)` (for memory address offset).
-- **ALU Function Expansion:** Multi-operation ALU supporting addition, subtraction, AND, OR, and SLT.
-
----
-
-### Stage 4: Adding Conditional Branching (`beq`) [Planned Architecture]
-
-Branch instructions alter sequential program execution based on comparison.
-
-```
-Instruction Format (B-Type):
- 31   30           25 24         20 19         15 14    12 11        8  7   6            0
-┌────┬───────────────┬─────────────┬─────────────┬────────┬───────────┬───┬──────────────┐
-│12  │   imm[10:5]   │     rs2     │     rs1     │ funct3 │ imm[4:1]  │11 │    opcode    │
-│ 1  │    111111     │    00100    │    00100    │  000   │   1010    │ 1 │   1100011    │
-└────┴───────────────┴─────────────┴─────────────┴────────┴───────────┴───┴──────────────┘
- Example: beq x4, x4, L7
-```
-
-#### Required Datapath Additions for `beq`:
-- **Branch Target Adder:** A dedicated 32-bit adder computing `PCTarget = PC + SignExt(imm_B)`.
-- **Zero Flag Evaluation:** ALU subtraction (`RD1 - RD2`) with `Zero` flag asserted when operands are equal.
-- **PCSrc Branch Logic:** `PCSrc = Branch & Zero` driving a 2-to-1 multiplexer to choose between `PC + 4` and `PCTarget`.
-
----
-
-## 5. Comprehensive Processor Datapath Architecture
-
-The diagram below illustrates the complete single-cycle datapath architecture incorporating both the implemented memory instructions and the planned R-type / branch paths:
+The diagram below illustrates the implemented single-cycle datapath architecture for the load/store core:
 
 ```
                   ┌────────────────────────────────────────────────────────┐
-                  │                 RM32 Unified Datapath                  │
+                  │                 RM32 Implemented Datapath             │
                   └────────────────────────────────────────────────────────┘
 
-              ┌──────────────────────────────────────────────┐
-              │                                              │
-              ▼                                              │
-         ┌─────────┐                                         │
-         │  MUX    │◄─── PCSrc (Branch & Zero) [Planned]     │
-         └──┬───┬──┘                                         │
-     PC+4   │   │ PCTarget                                   │
-      ┌─────┘   └──────┐                                     │
-      ▼                ▼                                     │
-   ┌──────┐         ┌──────┐                                 │
-   │  PC  │────────►│ ADD  │ (PC + SignExt(Imm)) [Planned]   │
-   └──┬───┘         └──┬───┘                                 │
-      │                └─────────────────────────────────────┘
-      ├───────────►┌─────────┐
-      │            │ ADD (+4)│──────────────┐
-      │            └─────────┘              │
-      ▼                                     ▼
- ┌──────────┐                          ┌─────────┐
- │ Inst Mem │                          │ MUX     │◄── ResultSrc [Planned]
- └────┬─────┘                          └──┬───┬──┘
-      │                                   │   │
-      │   instr[19:15] (rs1)              │   │ ReadData
-      ├───► [A1]   Register File          │   └──────────────┐
-      │   instr[24:20] (rs2)              │ ALUResult        │
-      ├───► [A2]      [RD1] ──────► [A]   │                  │
-      │   instr[11:7] (rd)                ▼                  │
-      ├───► [A3]      [RD2] ──┬───► [0]  ALU ───► Result ────┤
-      │                       │     [MUX]                    │
-      │                       └───► [1]   │ (ALUSrc)         │
-      │                             ▲     └──► Zero ─┐       │
-      │   instr[31:7]               │                │       │
-      └───► [Sign Ext] ─────────────┘                │       │
-                  │                                  ▼       │
-                  └───────────────────────────► [PCSrc Logic]│
-                                                     ▲       │
-                                                     │       │
-                               Data Memory           │       │
-                            ┌──────────────┐         │       │
-       ALU Result ─────────►│ Address      │         │       │
-       RD2 (WriteData) ────►│ Write Data   │         │       │
-       MemWrite ───────────►│ Write Enable │         │       │
-                            │ Read Data    ├─────────┴───────┘
-                            └──────────────┘
+    ┌───────────►┌─────────┐
+    │            │ ADD (+4)│──────────────┐
+    │            └─────────┘              │
+    │                                     │
+ ┌──┴───┐                                 │
+ │  PC  │◄────────────────────────────────┘ pc_next
+ └──┬───┘
+    │
+    ▼
+ ┌──────────┐
+ │ Inst Mem │ (memory)
+ └────┬─────┘
+      │
+      │   instruction[6:0]
+      ├───► [op_code]   Controller
+      │   instruction[14:12]   │
+      ├───► [func3]            ├──► reg_write
+      │                        ├──► mem_write
+      │                        ├──► imm_src[1:0]
+      │                        └──► alu_ctrl[2:0]
+      │
+      │   instruction[19:15]
+      ├───► [address1]   Register File
+      │   instruction[24:20]
+      ├───► [address2]      [data1] ──────► [a]   ALU
+      │   instruction[11:7]                 │     │
+      ├───► [address3]      [data2] ──┐     │     ├──► alu_result (addr)
+      │                               │     │     └──► zero
+      │   instruction[31:7]           │     ▼
+      └───► [instr] Sign Ext ─────────┼───► [b]
+                (imm_src)             │
+                                      ▼
+                                 Data Memory (memory)
+                             ┌───────────────────┐
+        addr (alu_result) ──►│ address           │
+        write_data (data2) ─►│ write_data        │
+        mem_write ──────────►│ write_en          │
+                             │ read_data         ├──► load_data (write_data)
+                             └───────────────────┘    to Register File
 ```
-
-*Note: In the current baseline RTL, the datapath executes `pc_next = pc + 4`, `load_data = dmem_data`, and `alu_input2 = immediate`, matching the dedicated memory subsystem flow.*
 
 ---
 
 ## 6. Control Unit Architecture & Truth Tables
 
-The control unit is organized around instruction decoding for single-cycle execution:
+The controller (`contoller.sv`) decodes the instruction opcode for single-cycle execution:
 
 ```mermaid
 flowchart TD
-    subgraph Control_Unit["Control Unit"]
+    subgraph Control_Unit["Controller (contoller.sv)"]
         direction TB
-        OP["op[6:0]"] --> MainDec["Main Decoder"]
+        OP["op_code[6:0]"] --> MainDec["Main Decoder"]
+        F3["func3[2:0]"] --> MainDec
         
-        MainDec -->|"RegWrite"| RW["RegWrite"]
-        MainDec -->|"MemWrite"| MW["MemWrite"]
-        MainDec -->|"ImmSrc[1:0]"| IS["ImmSrc[1:0]"]
-        MainDec -->|"alu_ctrl[2:0]"| AC["ALUControl[2:0]"]
+        MainDec -->|"reg_write"| RW["reg_write"]
+        MainDec -->|"mem_write"| MW["mem_write"]
+        MainDec -->|"imm_src[1:0]"| IS["imm_src[1:0]"]
+        MainDec -->|"alu_ctrl[2:0]"| AC["alu_ctrl[2:0]"]
     end
 ```
 
 ### Main Decoder Truth Table
 
-| Instruction | Opcode (`op[6:0]`) | RegWrite | ImmSrc | ALUSrc | MemWrite | ResultSrc | Branch | ALUOp | ALU Operation | Implementation Status |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|:---:|
-| **`lw`** | `7'b0000011` | `1` | `00` (I) | `1` | `0` | `1` (DMem) | `0` | `2'b00` | Addition (Base + Offset) | **Implemented** |
-| **`sw`** | `7'b0100011` | `0` | `01` (S) | `1` | `1` | `X` | `0` | `2'b00` | Addition (Base + Offset) | **Implemented** |
-| **R-Type** | `7'b0110011` | `1` | `XX` | `0` | `0` | `0` (ALU) | `0` | `2'b10` | Determined by `funct3` / `funct7` | *Planned* |
-| **`beq`** | `7'b1100011` | `0` | `10` (B) | `0` | `0` | `X` | `1` | `2'b01` | Subtraction (Compare `rs1 == rs2`) | *Planned* |
-
-### ALU Decoder Mapping
-
-| `ALUOp[1:0]` | `funct3[2:0]` | `funct7[5]` | `alu_ctrl[2:0]` | Operation | Status in RTL |
-|:---:|:---:|:---:|:---:|:---|:---:|
-| `2'b00` | `XXX` | `X` | `3'b010` | **Add** (address calculation for `lw`/`sw`) | **Implemented** |
-| `2'b01` | `XXX` | `X` | `3'b001` | **Subtract** (equality comparison for `beq`) | *Planned* |
-| `2'b10` | `3'b000` | `1'b0` | `3'b000` | **Add** (`add`) | *Planned* |
-| `2'b10` | `3'b000` | `1'b1` | `3'b001` | **Subtract** (`sub`) | *Planned* |
-| `2'b10` | `3'b010` | `1'b0` | `3'b101` | **Set Less Than** (`slt`) | *Planned* |
-| `2'b10` | `3'b110` | `1'b0` | `3'b011` | **Bitwise OR** (`or`) | *Planned* |
-| `2'b10` | `3'b111` | `1'b0` | `3'b010` | **Bitwise AND** (`and`) | *Planned* |
+| Instruction | Opcode (`op_code[6:0]`) | `reg_write` | `mem_write` | `imm_src[1:0]` | `alu_ctrl[2:0]` | ALU Operation |
+|:---|:---:|:---:|:---:|:---:|:---:|:---|
+| **`lw`** | `7'b0000011` | `1` | `0` | `2'b00` (I-type) | `3'b010` | Addition (Base + Offset) |
+| **`sw`** | `7'b0100011` | `0` | `1` | `2'b01` (S-type) | `3'b010` | Addition (Base + Offset) |
+| *Default / Other* | *default* | `0` | `0` | `2'b00` | `3'b010` | Addition |
 
 ---
 
 ## 7. Deep Inside the ALU
 
-In the current synthesizable RTL ([`rtl/alu.sv`](rtl/alu.sv)), the ALU implements the 32-bit addition operation required for load/store effective address calculation (`base + immediate`) alongside zero flag detection:
+In the synthesizable RTL ([`rtl/alu.sv`](rtl/alu.sv)), the ALU implements the 32-bit addition operation required for load/store effective address calculation (`base + immediate`) alongside zero flag detection:
 
 ```systemverilog
 always_comb begin
@@ -307,50 +231,7 @@ end
 assign zero = (result == 32'b0);
 ```
 
-The multi-function ALU structure below outlines the planned microarchitecture expansion for R-type execution:
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │       Multi-Function ALU (Planned Extension) │
-                    └──────────────────────────────────────────────┘
-
-                                   A [31:0]           B [31:0]
-                                      │                  │
-                         ┌────────────┼───────────┬──────┼────────┐
-                         │            │           │      ▼        │
-                         │            │           │   ┌──────┐    │
-                         │            │           │   │ NOT  │    │
-                         │            │           │   └──┬───┘    │
-                         │            │           │      │        │
-                         │            │           │  [0] │ [1]    │
-                         │            │           ├──►\  /        │
-                         │            │           │    \/ MUX     │
-                         │            │           │    │◄── alu_ctrl[0] (Invert B)
-                         │            │           │    │
-                         ▼            ▼           │    │
-                      ┌─────┐      ┌─────┐        │    │
-                      │ AND │      │ OR  │        │    │
-                      └──┬──┘      └──┬──┘        ▼    ▼
-                         │            │        ┌──────────┐
-                         │            │        │  ADDER   │◄── Cin = alu_ctrl[0]
-                         │            │        └──┬────┬──┘
-                         │            │           │    │ Cout/Sign
-                         │            │           │    ▼
-                         │            │           │ ┌───────────────┐
-                         │            │           │ │ Zero-Extend   │ (Set Less Than)
-                         │            │           │ └───────┬───────┘
-                         │            │           │         │
-                         ▼            ▼           ▼         ▼
-                      ┌─────────────────────────────────────────┐
-                      │              OUTPUT MUX                 │◄── alu_ctrl[2:0]
-                      └────────────────────┬────────────────────┘
-                                           │
-                                           ├───────────────► Result [31:0]
-                                           ▼
-                                    ┌──────────────┐
-                                    │ NOR REDUCTION│───────► Zero Flag
-                                    └──────────────┘
-```
+The zero flag indicates whether `result == 32'b0`, providing zero detection output alongside the address computation.
 
 ---
 
@@ -360,7 +241,8 @@ The repository is structured into modular SystemVerilog source files:
 
 ```
 rm32/
-├── README.md                      # Comprehensive microarchitecture documentation
+├── README.md                      # Processor microarchitecture documentation
+├── LICENSE                        # MIT License
 ├── .gitignore                     # Git tracking exclusions
 ├── images/                        # Simulation waveforms and verification artifacts
 │   ├── alu_add_verification.png   # ALU adder unit simulation waveform
@@ -385,13 +267,13 @@ rm32/
 ### RTL Module Summaries
 
 - **[`rtl/datapath.sv`](rtl/datapath.sv):** Instantiates and interconnects the Program Counter register, Instruction Memory, Controller, Register File, Sign Extender, ALU, and Data Memory for single-cycle execution of `lw` and `sw`.
-- **[`rtl/contoller.sv`](rtl/contoller.sv):** Decodes instruction opcode (`instruction[6:0]`) for `lw` (`7'b0000011`) and `sw` (`7'b0100011`), asserting `reg_write`, `mem_write`, `imm_src`, and `alu_ctrl`.
+- **[`rtl/contoller.sv`](rtl/contoller.sv):** Decodes instruction opcode (`op_code[6:0]`) for `lw` (`7'b0000011`) and `sw` (`7'b0100011`), asserting `reg_write`, `mem_write`, `imm_src`, and `alu_ctrl`.
 - **[`rtl/alu.sv`](rtl/alu.sv):** Performs 32-bit arithmetic addition (`result = a + b`) for memory address generation and computes the `zero` flag.
 - **[`rtl/reg_file.sv`](rtl/reg_file.sv):** Implements thirty-two 32-bit registers. Features asynchronous dual read (`data1`, `data2`), synchronous write on `clk` posedge with write-enable gate, and guarantees `register[0]` remains hardwired to zero.
 - **[`rtl/signextn.sv`](rtl/signextn.sv):** Assembles and sign-extends 12-bit immediate offsets based on `imm_source`:
   - `2'b00` (I-type): `{instr[24:13]}` $\rightarrow$ sign-extended to 32 bits.
   - `2'b01` (S-type): `{instr[24:18], instr[4:0]}` $\rightarrow$ sign-extended to 32 bits.
-- **[`rtl/dmem.sv`](rtl/dmem.sv):** 64-word memory block initialized from a `.hex` file. Writes occur synchronously on `clk` posedge when word-aligned (`address[1:0] == 2'b00`), while reads occur combinationally.
+- **[`rtl/dmem.sv`](rtl/dmem.sv):** 64-word parameterized `memory` module initialized from a `.hex` file. Writes occur synchronously on `clk` posedge when word-aligned (`address[1:0] == 2'b00`), while reads occur combinationally.
 - **[`rtl/imem.sv`](rtl/imem.sv):** Instruction memory interface wrapper (the active datapath directly instantiates the parameterized `memory` module from `dmem.sv` pre-loaded with `imemory.hex`).
 
 ---
