@@ -42,7 +42,7 @@ lint:
 # ------------------------------------------------------------------------------
 # Test Execution
 # ------------------------------------------------------------------------------
-test: asm test-unit test-integration test-pipeline test-iss
+test: asm test-unit test-integration test-pipeline test-iss test-random
 	@echo "======================================================================"
 	@echo ">>> ALL VERIFICATION SUITES COMPLETED SUCCESSFULLY (100% PASS) <<<"
 	@echo "======================================================================"
@@ -78,6 +78,11 @@ test-iss: asm test-integration
 	PYTHONPATH=tools $(PYTHON) tools/run_trace_diff.py build/trace_sum10_rtl.txt tests/asm/sum10.hex
 	PYTHONPATH=tools $(PYTHON) tools/run_trace_diff.py build/trace_mem_rtl.txt tests/asm/mem_loop.hex
 	@echo ">>> Golden Model Trace Diff Comparisons Match 100% <<<"
+
+test-random:
+	@echo "=== Running Random Differential Test (Single-Cycle & 5-Stage vs ISS Golden Model) ==="
+	$(PYTHON) tools/random_diff_test.py 600
+	@echo ">>> Random Differential Tests Passed (0 mismatches across 600 programs) <<<"
 
 # ------------------------------------------------------------------------------
 # Synthesis Check (Generic Yosys Synthesis)
