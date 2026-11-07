@@ -217,6 +217,14 @@ module pipe_datapath #(
     // 3. EXECUTE (EX) STAGE & FORWARDING
     // =========================================================================
     wire [31:0] alu_result_mem;
+    wire [1:0]  result_src_mem_fwd;
+    wire [31:0] pc_plus_4_mem_fwd;
+    wire [31:0] immediate_mem_fwd;
+
+    // EX/MEM forwarding value must be the true writeback value, not always the ALU result
+    // (for LUI, writeback value is immediate; for JAL, writeback value is PC+4)
+    wire [31:0] fwd_value_mem = (result_src_mem_fwd == 2'b11) ? immediate_mem_fwd :
+                                (result_src_mem_fwd == 2'b10) ? pc_plus_4_mem_fwd : alu_result_mem;
 
     logic [31:0] alu_operand_a;
     logic [31:0] write_data_ex;
@@ -224,14 +232,14 @@ module pipe_datapath #(
     always_comb begin
         // Forwarding mux A
         case (forward_a)
-            2'b10:   alu_operand_a = alu_result_mem; // EX/MEM forwarding
+            2'b10:   alu_operand_a = fwd_value_mem;  // EX/MEM forwarding
             2'b01:   alu_operand_a = result_wb;      // MEM/WB forwarding
             default: alu_operand_a = data1_ex;       // Register file
         endcase
 
         // Forwarding mux B
         case (forward_b)
-            2'b10:   write_data_ex = alu_result_mem; // EX/MEM forwarding
+            2'b10:   write_data_ex = fwd_value_mem;  // EX/MEM forwarding
             2'b01:   write_data_ex = result_wb;      // MEM/WB forwarding
             default: write_data_ex = data2_ex;       // Register file
         endcase
@@ -264,6 +272,10 @@ module pipe_datapath #(
     wire [4:0]  rd_mem;
     wire [31:0] pc_plus_4_mem;
     wire [31:0] immediate_mem;
+
+    assign result_src_mem_fwd = result_src_mem;
+    assign pc_plus_4_mem_fwd  = pc_plus_4_mem;
+    assign immediate_mem_fwd  = immediate_mem;
 
     pipe_ex_mem reg_ex_mem (
         .clk            (clk),

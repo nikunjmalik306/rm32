@@ -50,13 +50,13 @@ module tb_pipeline_hazards;
         reset = 0;
 
         // Run until program completes through writeback
-        repeat (30) @(posedge clk);
+        repeat (35) @(posedge clk);
         #1;
 
         // 1. RAW forwarding
-        check_reg(1, 32'd10, "Base value in x1");
-        check_reg(2, 32'd20, "RAW EX/MEM -> EX forward to x2");
-        check_reg(3, 32'd30, "RAW EX/MEM & MEM/WB forward to x3");
+        check_reg(1, 32'hD7B14000, "Final x1 value from LUI");
+        check_reg(2, 32'd260,      "x2 updated to 260");
+        check_reg(3, 32'd30,       "RAW EX/MEM & MEM/WB forward to x3");
 
         // 2. x0 forwarding corner case
         check_reg(4, 32'd5,  "x0 forwarding suppression (x4 = 5, not 35)");
@@ -69,6 +69,9 @@ module tb_pipeline_hazards;
         check_reg(7, 32'd15, "Branch operand 1 in x7");
         check_reg(8, 32'd0,  "Branch operand 2 in x8");
         check_reg(9, 32'd77, "Branch taken after dependent instruction, flushed target skipped");
+
+        // 5. LUI EX/MEM forwarding corner case regression test
+        check_reg(10, 32'hD7B14000, "LUI EX/MEM forward (x10 = 0xD7B14000, not corrupted by ALU addition)");
 
         if (errors == 0) begin
             $display(">>> ALL PIPELINE HAZARD TESTS PASSED <<<");

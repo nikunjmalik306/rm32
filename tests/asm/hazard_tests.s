@@ -27,3 +27,8 @@
 
 branch_dep_hit:
     addi x9, x0, 77      # x9 = 77 (0x4D)
+
+    # 5. LUI EX/MEM forwarding regression test (verifies true writeback value, not corrupted ALU result)
+    addi x2, x0, 260     # x2 = 0x104
+    lui  x1, 0xD7B14     # x1 = 0xD7B14000 (bits [19:15] alias to x2)
+    addi x10, x1, 0      # EX/MEM forward x1 -> x10 must be 0xD7B14000, NOT 0xD7B14104
