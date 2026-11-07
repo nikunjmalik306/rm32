@@ -15,3 +15,6 @@ notes_images/
 *.vcd
 .Xil/
 xsim.dir/
+build/
+sim_*
+trace_*.txt

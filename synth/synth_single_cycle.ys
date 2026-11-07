@@ -1,0 +1,7 @@
+# Yosys generic synthesis script for RM32 Single-Cycle Core
+read_verilog -sv -DSYNTHESIS rtl/alu.sv rtl/controller.sv rtl/signextn.sv rtl/reg_file.sv rtl/imem.sv rtl/dmem.sv rtl/datapath.sv
+hierarchy -top datapath
+proc; opt; fsm; opt; memory; opt
+techmap; opt
+stat
+ltp

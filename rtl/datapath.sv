@@ -19,8 +19,12 @@ module datapath #(
     parameter int DMEM_WORDS = 128,
     parameter     DMEM_INIT  = "rtl/dmem.hex"
 )(
-    input logic clk,
-    input logic reset
+    input  logic        clk,
+    input  logic        reset,
+    output logic [31:0] pc_out,
+    output logic [31:0] alu_result_out,
+    output logic [31:0] write_data_out,
+    output logic        mem_write_out
 );
 
     // =========================================================================
@@ -165,6 +169,12 @@ module datapath #(
             default: load_data = alu_result;
         endcase
     end
+
+    // Output signal assignments for top-level observability & synthesis
+    assign pc_out         = pc;
+    assign alu_result_out = alu_result;
+    assign write_data_out = data2;
+    assign mem_write_out  = mem_write;
 
     // =========================================================================
     // 9. SYSTEMVERILOG ASSERTIONS (Active invariant verification)
