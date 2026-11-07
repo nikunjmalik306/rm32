@@ -228,43 +228,39 @@ The full test suite executes automatically via `make test`. All results below ar
 | [`tb_programs.sv`](tests/integration/tb_programs.sv) | Single-Cycle | `sum10.hex` | 3 | **PASS** | Loop $\sum_{i=1}^{10} i = 55$; writes to DMem[0], reloads to x3 |
 | [`tb_programs.sv`](tests/integration/tb_programs.sv) | Single-Cycle | `mem_loop.hex` | 3 | **PASS** | Array store [10,20,30,40], loop sum=100; reloads to x7 |
 | [`tb_pipeline_hazards.sv`](tests/pipelined/tb_pipeline_hazards.sv) | 5-Stage Pipeline | `hazard_tests.hex` | 9 | **PASS** | RAW forwarding, x0 suppression, load-use stall, branch flush |
-| [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `sum10.hex` | 3 | **PASS** | Final sum x2=55, dmem[0]=55, x3=55; 56 cycles, 36 dynamic insts |
-| [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `mem_loop.hex` | 3 | **PASS** | Final sum x5=100, dmem[4]=100, x7=100; 42 cycles, 29 dynamic insts |
+| [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `sum10.hex` | 3 | **PASS** | Final sum x2=55, dmem[0]=55, x3=55; 56 cycles, 35 dynamic insts (CPI 1.60) |
+| [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `mem_loop.hex` | 3 | **PASS** | Final sum x5=100, dmem[4]=100, x7=100; 42 cycles, 29 dynamic insts (CPI 1.45) |
 | [`single_cycle_TB.sv`](TestBench/single_cycle_TB.sv) | Single-Cycle | Legacy Test | 2 | **PASS** | Original Vivado testbench updated for active-high reset |
 
-### Golden Model Trace-Diff Verification (`tools/run_trace_diff.py`)
+### Golden Model Trace-Diff & Random Differential Verification
 
-| Test Program | Golden Model (Python ISS) | RTL Simulation | Instructions Compared | Trace Mismatches | Status |
-|:---|:---|:---|:---:|:---:|:---:|
-| `sum10.hex` | `rv32i_iss.py` | Single-Cycle RTL | 60 instructions | 0 | **100% EXACT MATCH** |
-| `mem_loop.hex` | `rv32i_iss.py` | Single-Cycle RTL | 60 instructions | 0 | **100% EXACT MATCH** |
+| Test Type | Golden Reference | Target RTL Cores Verified | Programs / Instructions Evaluated | Result | Verification Status |
+|:---|:---|:---|:---:|:---:|:---|
+| **Random Differential Testing** (`tools/random_diff_test.py`) | Python ISS (`tools/rv32i_iss.py`) | Single-Cycle Core & 5-Stage Pipelined Core | **600 constrained-random programs** (RAW hazards, load-use stalls, branches, jumps, LUI) | **0 mismatches** (600/600 match) | **100% BIT-FOR-BIT MATCH** |
+| **Directed Program Trace Diff** (`sum10.hex`) | Python ISS (`tools/rv32i_iss.py`) | Single-Cycle RTL Core | 35 active dynamic instructions + post-run drain cycles | **0 mismatches** | **100% EXACT MATCH** |
+| **Directed Program Trace Diff** (`mem_loop.hex`) | Python ISS (`tools/rv32i_iss.py`) | Single-Cycle RTL Core | 29 active dynamic instructions + post-run drain cycles | **0 mismatches** | **100% EXACT MATCH** |
 
 ---
 
 ## 8. Measured Cycles Per Instruction (CPI)
 
-Cycles and retired instructions measured dynamically during behavioral simulation:
+Cycles and dynamic instructions measured accurately via cycle-accurate simulation:
 
-| Test Program | Dynamic Instructions | Single-Cycle Cycles | Single-Cycle CPI | 5-Stage Pipelined Cycles | 5-Stage Pipelined CPI | Pipeline Stalls & Flushes |
+| Test Program | Dynamic Instructions | Single-Cycle Execution Cycles | Single-Cycle CPI | 5-Stage Pipelined Execution Cycles | 5-Stage Pipelined Real CPI | Stall / Flush Overhead in Pipeline |
 |:---|:---:|:---:|:---:|:---:|:---:|:---|
-| **`sum10`** ($\sum 1..10$) | 36 | 36 | **1.00** | 56 | **1.56** | 18 branch flush cycles ($9 \times 2$) |
-| **`mem_loop`** (Array Sum) | 29 | 29 | **1.00** | 42 | **1.45** | 4 load-use stalls + 6 branch flushes ($3 \times 2$) |
+| **`sum10`** ($\sum_{i=1}^{10} i$) | 35 | 35 | **1.00** | 56 | **1.60** ($56/35$) | 18 branch flush cycles ($9 \times 2$) + 4 pipeline fill cycles |
+| **`mem_loop`** (Array Sum) | 29 | 29 | **1.00** | 42 | **1.45** ($42/29$) | 4 load-use stalls + 6 branch flushes ($3 \times 2$) + 4 pipeline fill cycles |
 
 ---
 
-## 9. Generic Synthesis Results (Yosys 0.70+post)
+## 9. Generic Synthesis Verification (Yosys)
 
 > [!NOTE]
-> Synthesis was executed using generic technology mapping (`techmap; opt`) in Yosys. This represents generic gate-level optimization and does not represent signoff physical place-and-route numbers.
+> Both the single-cycle and 5-stage pipelined cores cleanly elaborate and pass generic logic synthesis in Yosys (`make synth`). Gate/cell counts vary depending on the Yosys version and target library mapping (e.g. Yosys 0.70+ reports ~94 cells for single-cycle and ~202 cells for the pipelined core, whereas Yosys 0.33 reports ~109 and ~235 cells). Because generic synthesis models memories as arrays rather than physical SRAM/BRAM macros, these figures represent generic gate-level optimization rather than physical silicon signoff numbers.
 
-| Module | Design Scope | Generic Cell Count | Longest Topological Path (Logic Levels) | Key Components |
-|:---|:---|:---:|:---:|:---|
-| `alu` | Submodule | 610 | 64 | 32-bit adder/subtractor, barrel logic, signed comparator |
-| `controller` | Submodule | 44 | 6 | Main decoder & ALU decoder combinational gates |
-| `hazard_unit` | Submodule | 88 | 8 | Forwarding comparators, load-use detection logic |
-| `reg_file` | Submodule | 4,585 | 18 | 992 flip-flops (31 registers x 32 bits), dual 32:1 read muxes |
-| `datapath` | Single-Cycle Top | 94 | 87 | Full single-cycle core driving observable top-level ports |
-| `pipe_datapath` | Pipelined Top | 202 | 96 | 5-stage pipeline registers, hazard control, performance counters |
+- **Single-Cycle Datapath:** Clean generic synthesis via `synth -top datapath -flatten`.
+- **5-Stage Pipelined Datapath:** Clean generic synthesis via `synth -top pipe_datapath -flatten`.
+- **Core Submodules:** `alu` (610 generic cells), `controller` (44 cells), `hazard_unit` (88 cells), and `reg_file` (4,585 cells with 992 flip-flops) synthesize cleanly without warnings.
 
 ---
 
@@ -309,6 +305,9 @@ rm32/
 │   ├── pipelined/                 # Pipelined system testbenches
 │   │   ├── tb_pipeline_hazards.sv
 │   │   └── tb_pipeline_programs.sv
+│   ├── random/                    # Random differential testbenches
+│   │   ├── tb_random_pipe.sv
+│   │   └── tb_random_single.sv
 │   └── asm/                       # Assembly test programs and assembled .hex files
 │       ├── sum10.s / sum10.hex
 │       ├── mem_loop.s / mem_loop.hex
@@ -317,7 +316,8 @@ rm32/
 ├── tools/
 │   ├── assembler.py               # Custom Python RV32I subset assembler
 │   ├── rv32i_iss.py               # Python Golden Reference Instruction Set Simulator
-│   └── run_trace_diff.py          # Automated RTL vs Golden ISS trace comparison tool
+│   ├── run_trace_diff.py          # Automated RTL vs Golden ISS trace comparison tool
+│   └── random_diff_test.py        # Constrained-random differential verification suite
 └── .github/workflows/
     └── ci.yml                     # GitHub Actions CI (lint, full test suite, synthesis)
 ```

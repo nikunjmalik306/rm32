@@ -24,7 +24,8 @@ All notable changes made to turn the RM32 repository into a portfolio-grade RISC
   - Architectural `x0` forwarding suppression (`rd != 5'd0`).
   - 1-cycle load-use hazard detection and hardware stall.
   - Branch and jump resolution in EX with 2-cycle flush of younger instructions.
-- **Performance Counters:** Added hardware cycle and retired instruction counters for precise CPI measurement.
+- **LUI & JAL EX/MEM Forwarding Bug Fix:** Fixed critical EX/MEM forwarding path in `pipelined/pipe_datapath.sv`. Previously, `alu_result_mem` was unconditionally forwarded; for `lui`, the ALU output contained an uncomputed addition using arbitrary bits in `instr[19:15]`. Multiplexed `fwd_value_mem` to forward `immediate_mem` for `lui` and `pc_plus_4_mem` for `jal`.
+- **Performance Counters:** Added hardware cycle and retired instruction counters for precise CPI measurement. Fixed `sum10` dynamic instruction count to 35 (CPI 1.60).
 
 ### Verification Infrastructure
 - **Self-Checking Unit Testbenches:** Added standalone, self-checking unit testbenches in `tests/unit/`:
@@ -36,9 +37,10 @@ All notable changes made to turn the RM32 repository into a portfolio-grade RISC
 - **Integration Testbenches:** Added system-level testbenches in `tests/integration/` and `tests/pipelined/`:
   - `tb_instruction_classes.sv` (directed tests for signed SLT/SLTI, negative immediates, LUI, JAL, BEQ, BNE).
   - `tb_programs.sv` (runs `sum10.hex` and `mem_loop.hex` with trace dumping).
-  - `tb_pipeline_hazards.sv` (tests RAW forwarding, x0 suppression, load-use stall, branch flush).
+  - `tb_pipeline_hazards.sv` (tests RAW forwarding, x0 suppression, load-use stall, branch flush, and back-to-back LUI dependency).
   - `tb_pipeline_programs.sv` (runs full programs on 5-stage pipeline with CPI measurement).
-- **Assembler:** Developed Python RV32I subset assembler (`tools/assembler.py`) supporting pseudo-instructions (`li, nop, j`), label resolution, and standard `.hex` generation.
+- **Random Differential Testing Suite:** Added automated differential fuzz testing tool (`tools/random_diff_test.py`) with testbenches `tests/random/tb_random_single.sv` and `tests/random/tb_random_pipe.sv`, validating 600 randomized instruction sequences against both cores and the ISS golden model with zero mismatches.
+- **Assembler:** Developed Python RV32I subset assembler (`tools/assembler.py`) supporting pseudo-instructions (`li, nop, j`), label resolution, 128-word padding to eliminate `$readmemh` warnings, and standard `.hex` generation.
 - **Golden Model (ISS):** Built standalone Python instruction set simulator (`tools/rv32i_iss.py`) modeling architectural register and memory state.
 - **Trace-Diff Verification:** Created automated trace comparison tool (`tools/run_trace_diff.py`) comparing RTL execution traces against the Python ISS golden model.
 

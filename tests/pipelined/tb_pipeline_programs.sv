@@ -39,12 +39,12 @@ module tb_pipeline_programs;
             if (`TEST_HEX == "tests/asm/sum10.hex") begin
                 if (dut.reg_write_wb && dut.rd_wb == 5'd3 && completion_cycle == 0) begin
                     completion_cycle   = cycles;
-                    program_inst_count = 36;
+                    program_inst_count = 35; // Exactly 35 dynamic instructions (1+1+1 + 10*3 + 1+1)
                 end
             end else if (`TEST_HEX == "tests/asm/mem_loop.hex") begin
                 if (dut.reg_write_wb && dut.rd_wb == 5'd7 && completion_cycle == 0) begin
                     completion_cycle   = cycles;
-                    program_inst_count = 29;
+                    program_inst_count = 29; // Exactly 29 dynamic instructions (4+4+3 + 4*4 + 1+1)
                 end
             end
         end

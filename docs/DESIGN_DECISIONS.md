@@ -95,3 +95,22 @@ This document details the architectural and engineering rationale behind every m
 - **Rationale:**
   - Self-checking testbenches verify specific assertions, but cannot mathematically prove that intermediate register states during multi-cycle programs are compliant with the RISC-V specification.
   - The Python ISS implements the architectural semantics independently of RTL hardware timing. Comparing the register file state after every instruction (`tools/run_trace_diff.py`) provides 100% confidence in microarchitectural compliance.
+
+---
+
+## 12. EX/MEM Writeback Forwarding Multiplexing (LUI & JAL)
+- **Decision:** Multiplex the forwarded value from the EX/MEM pipeline stage (`fwd_value_mem`) using `result_src_mem` (`immediate_mem` for `lui`, `pc_plus_4_mem` for `jal`, and `alu_result_mem` otherwise).
+- **Rationale:**
+  - In standard pipeline diagrams, the EX/MEM register forwards `alu_result_mem` to the EX stage.
+  - However, for `lui`, the result is not produced by the ALU—it is the upper immediate generated in the ID stage and passed through the pipeline. The ALU's output during a `lui` instruction is `rs1 + immediate`, where `rs1` is whatever arbitrary bits were in `instr[19:15]`.
+  - Forwarding raw `alu_result_mem` caused data corruption whenever an instruction immediately followed `lui` and consumed its destination register if `instr[19:15]` happened to index a non-zero register.
+  - Multiplexing `fwd_value_mem` at the EX/MEM stage guarantees that true writeback data is forwarded for all non-load instructions immediately at the end of the EX stage.
+
+---
+
+## 13. Automated Random Differential Testing
+- **Decision:** Randomized instruction sequence generator running 600 programs against both single-cycle and 5-stage cores alongside the golden ISS.
+- **Rationale:**
+  - Human-authored directed testbenches inherently encode human assumptions and biases (e.g. initial register values of 0, standard register assignments, structured loops).
+  - Random differential testing exercises unpredictable register dependencies, dense hazard permutations (such as back-to-back RAW with alternating destinations), and immediate values that would otherwise be missed by directed suites.
+  - Any architectural divergence triggers an immediate non-zero exit code to fail CI.
