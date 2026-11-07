@@ -207,6 +207,9 @@ def assemble_file(input_path, output_path=None):
         with open(output_path, 'w') as f:
             for code, comment in machine_code:
                 f.write(f"{code:08x}\n")
+            # Pad up to 128 words to avoid $readmemh "not enough words" simulator warnings
+            for _ in range(128 - len(machine_code)):
+                f.write("00000013\n")
     return machine_code
 
 if __name__ == '__main__':
