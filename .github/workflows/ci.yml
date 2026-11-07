@@ -1,0 +1,40 @@
+name: RM32 RTL Verification & CI
+
+on:
+  push:
+    branches: [ main, upgrade/rv32i-complete, "upgrade/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-verify:
+    name: Lint, Test Suite & Golden ISS Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Open-Source EDA Tools & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog verilator yosys python3
+
+      - name: Print Tool Versions
+        run: |
+          iverilog -v || true
+          verilator --version || true
+          yosys -V || true
+          python3 --version
+
+      - name: Run Verilator Lint (-Wall --lint-only)
+        run: |
+          make lint
+
+      - name: Run Full RTL Verification Test Suite
+        run: |
+          make test
+
+      - name: Run Generic Yosys Synthesis Check
+        run: |
+          make synth

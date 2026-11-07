@@ -1,48 +1,54 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 06.08.2026 12:22:23
-// Design Name: 
+// Design Name: Single-Cycle Core Integration Testbench
 // Module Name: single_cycle_TB
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
+// Description:
+// Self-checking integration testbench for the RM32 single-cycle datapath.
+// Validates execution of initial load/store verification program.
 //////////////////////////////////////////////////////////////////////////////////
 
 module single_cycle_TB;
 
     logic clk;
-    logic reset_n;
-    
+    logic reset;
+
     always #5 clk = ~clk;
-    datapath dut ( .clk(clk),.reset_n(reset_n));
+
+    datapath dut (
+        .clk   (clk),
+        .reset (reset)
+    );
+
+    int errors = 0;
 
     initial begin
-        clk    = 0;
-        reset_n = 1; 
+        clk   = 0;
+        reset = 1; // Active-high reset
         repeat (2) @(posedge clk);
-        reset_n = 0;
-        @(posedge clk);
-        repeat (7) @(posedge clk);
-        if (dut.register.register[19] !== 32'hDEADBEEF) begin
-            $error("FAIL: x19 = %h, expected DEADBEEF", dut.register.register[19]);
+        #1;
+        reset = 0;
+
+        repeat (8) @(posedge clk);
+        #1;
+
+        if (dut.register.rf[19] !== 32'hDEADBEEF) begin
+            $error("FAIL: x19 = %h, expected DEADBEEF", dut.register.rf[19]);
+            errors++;
         end else begin
-            $display("PASS: x19 = %h as expected", dut.register.register[19]);
+            $display("PASS: x19 = %h as expected", dut.register.rf[19]);
         end
+
         if (dut.data_memory.mem[3] !== 32'hDEADBEEF) begin
             $error("FAIL: datamem 12 = %h, expected DEADBEEF", dut.data_memory.mem[3]);
+            errors++;
         end else begin
-            $display("PASS: datamem 12 = %h as expected",dut.data_memory.mem[3]);
+            $display("PASS: datamem 12 = %h as expected", dut.data_memory.mem[3]);
+        end
+
+        if (errors == 0) begin
+            $display("ALL TESTS PASSED: single_cycle_TB");
+        end else begin
+            $display("TEST FAILED with %0d errors: single_cycle_TB", errors);
         end
 
         #20;
