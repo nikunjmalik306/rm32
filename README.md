@@ -12,8 +12,8 @@
 ## 1. Project Overview
 
 **RM32** is a modular, verified 32-bit RISC-V processor core implemented in SystemVerilog conforming to the open-standard [RISC-V RV32I Unprivileged ISA](https://riscv.org/). The repository provides two complete, independent microarchitectures:
-1. **Single-Cycle Datapath (`rtl/`):** Executes all supported instructions in 1 clock cycle ($\text{CPI} = 1.0$), featuring unified immediate sign-extension, ALU with zero flag, word-aligned memory interfaces, and embedded SystemVerilog Assertions (SVA).
-2. **5-Stage Pipelined Core (`pipelined/`):** Implements a classic IF/ID/EX/MEM/WB pipeline equipped with full data forwarding (EX/MEM and MEM/WB to EX), 1-cycle load-use hazard stalling with bubble injection, branch resolution in the EX stage with 2-cycle speculative flush, and hardware performance counters.
+1. **Single-Cycle Datapath ([`rtl/`](rtl/datapath.sv)):** Executes all supported instructions in 1 clock cycle ($\text{CPI} = 1.0$), featuring unified immediate sign-extension, ALU with zero flag, word-aligned memory interfaces, and embedded SystemVerilog Assertions (SVA).
+2. **5-Stage Pipelined Core ([`pipelined/`](pipelined/README.md)):** Implements a classic IF/ID/EX/MEM/WB pipeline ([`pipe_datapath.sv`](pipelined/pipe_datapath.sv)) equipped with full data forwarding ([`hazard_unit.sv`](pipelined/hazard_unit.sv): EX/MEM and MEM/WB to EX with `LUI`/`JAL` bypass muxing), WB-to-ID internal forwarding, 1-cycle load-use hazard stalling with bubble injection, branch resolution in the EX stage with 2-cycle speculative flush, and hardware performance counters (`cycles_count`, `retired_inst_count`). See the [5-Stage Pipelined Core Documentation](pipelined/README.md) for a module-by-module guide.
 
 The design is verified end-to-end using an open-source EDA toolchain (Icarus Verilog, Verilator, and Yosys), featuring self-checking unit testbenches, directed hazard tests, real assembly programs, and an independent Python Instruction Set Simulator (ISS) golden reference model with automated trace diff.
 
@@ -227,7 +227,7 @@ The full test suite executes automatically via `make test`. All results below ar
 | [`tb_instruction_classes.sv`](tests/integration/tb_instruction_classes.sv) | Single-Cycle | `edge_cases.hex` | 15 | **PASS** | x0 invariant, SLT/SLTI signed logic, LUI, JAL link/jump, BEQ/BNE |
 | [`tb_programs.sv`](tests/integration/tb_programs.sv) | Single-Cycle | `sum10.hex` | 3 | **PASS** | Loop $\sum_{i=1}^{10} i = 55$; writes to DMem[0], reloads to x3 |
 | [`tb_programs.sv`](tests/integration/tb_programs.sv) | Single-Cycle | `mem_loop.hex` | 3 | **PASS** | Array store [10,20,30,40], loop sum=100; reloads to x7 |
-| [`tb_pipeline_hazards.sv`](tests/pipelined/tb_pipeline_hazards.sv) | 5-Stage Pipeline | `hazard_tests.hex` | 9 | **PASS** | RAW forwarding, x0 suppression, load-use stall, branch flush |
+| [`tb_pipeline_hazards.sv`](tests/pipelined/tb_pipeline_hazards.sv) | 5-Stage Pipeline | `hazard_tests.hex` | 10 | **PASS** | RAW forwarding, x0 suppression, load-use stall, branch flush, LUI EX/MEM bypass |
 | [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `sum10.hex` | 3 | **PASS** | Final sum x2=55, dmem[0]=55, x3=55; 56 cycles, 35 dynamic insts (CPI 1.60) |
 | [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) | 5-Stage Pipeline | `mem_loop.hex` | 3 | **PASS** | Final sum x5=100, dmem[4]=100, x7=100; 42 cycles, 29 dynamic insts (CPI 1.45) |
 | [`single_cycle_TB.sv`](TestBench/single_cycle_TB.sv) | Single-Cycle | Legacy Test | 2 | **PASS** | Original Vivado testbench updated for active-high reset |
@@ -321,6 +321,14 @@ rm32/
 └── .github/workflows/
     └── ci.yml                     # GitHub Actions CI (lint, full test suite, synthesis)
 ```
+
+### Direct Source & Verification Links
+
+- **5-Stage Pipelined Core ([`pipelined/README.md`](pipelined/README.md)):** [`pipe_datapath.sv`](pipelined/pipe_datapath.sv) · [`hazard_unit.sv`](pipelined/hazard_unit.sv) · [`pipe_if_id.sv`](pipelined/pipe_if_id.sv) · [`pipe_id_ex.sv`](pipelined/pipe_id_ex.sv) · [`pipe_ex_mem.sv`](pipelined/pipe_ex_mem.sv) · [`pipe_mem_wb.sv`](pipelined/pipe_mem_wb.sv)
+- **Single-Cycle Core (`rtl/`):** [`datapath.sv`](rtl/datapath.sv) · [`controller.sv`](rtl/controller.sv) · [`alu.sv`](rtl/alu.sv) · [`reg_file.sv`](rtl/reg_file.sv) · [`signextn.sv`](rtl/signextn.sv) · [`imem.sv`](rtl/imem.sv) · [`dmem.sv`](rtl/dmem.sv)
+- **Pipelined & Differential Tests:** [`tb_pipeline_hazards.sv`](tests/pipelined/tb_pipeline_hazards.sv) · [`tb_pipeline_programs.sv`](tests/pipelined/tb_pipeline_programs.sv) · [`tb_random_pipe.sv`](tests/random/tb_random_pipe.sv) · [`tb_random_single.sv`](tests/random/tb_random_single.sv) · [`hazard_tests.s`](tests/asm/hazard_tests.s)
+- **Verification Tooling (`tools/`):** [`assembler.py`](tools/assembler.py) · [`rv32i_iss.py`](tools/rv32i_iss.py) · [`run_trace_diff.py`](tools/run_trace_diff.py) · [`random_diff_test.py`](tools/random_diff_test.py)
+- **Architecture & Interview Docs (`docs/`):** [`DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) · [`INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md) · [`CHANGELOG.md`](CHANGELOG.md)
 
 ---
 
